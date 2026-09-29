@@ -1,15 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
-import { isAuthenticated, logout } from '../utils/auth.js'
-import { useState, useEffect } from 'react'
+import { siteConfig } from '../config/site.js'
 
 export default function Header() {
   const location = useLocation()
-  const [authed, setAuthed] = useState(isAuthenticated())
-
-  useEffect(() => {
-    setAuthed(isAuthenticated())
-  }, [location])
-
   const navItems = [
     { path: '/', label: '首页' },
     { path: '/archive', label: '归档' },
@@ -21,8 +14,8 @@ export default function Header() {
     <header className="app-header">
       <div className="header-inner">
         <Link to="/" className="header-logo">
-          <span className="logo-icon">📝</span>
-          <span className="logo-text">Tech Blog</span>
+          <span className="logo-icon">{siteConfig.logoIcon || '📝'}</span>
+          <span>{siteConfig.title}</span>
         </Link>
         <nav className="header-nav">
           {navItems.map(item => (
@@ -34,14 +27,6 @@ export default function Header() {
               {item.label}
             </Link>
           ))}
-          {authed ? (
-            <>
-              <Link to="/admin" className="nav-link nav-admin">管理</Link>
-              <button className="nav-link nav-logout" onClick={() => { logout(); setAuthed(false) }}>退出</button>
-            </>
-          ) : (
-            <Link to="/admin" className="nav-link nav-admin">登录</Link>
-          )}
         </nav>
       </div>
     </header>

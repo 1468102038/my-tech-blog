@@ -6,21 +6,36 @@ const API = GITHUB_CONFIG.apiBase
 const OWNER = GITHUB_CONFIG.owner
 const REPO = GITHUB_CONFIG.repo
 
-// 获取文章列表
+// 获取文章列表（含元数据）
 export async function listPosts() {
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${GITHUB_CONFIG.postsPath}`)
     if (!res.ok) return []
     const files = await res.json()
-    return files
-      .filter(f => f.name.endsWith('.md'))
-      .map(f => ({
-        name: f.name,
-        slug: f.name.replace('.md', ''),
-        path: f.path,
-        sha: f.sha,
-        url: f.download_url,
-      }))
+    const mdFiles = files.filter(f => f.name.endsWith('.md'))
+
+    const posts = await Promise.all(mdFiles.map(async f => {
+      const slug = f.name.replace('.md', '')
+      try {
+        const contentRes = await fetch(f.download_url)
+        const content = await contentRes.text()
+        const { meta, body } = parseFrontMatter(content)
+        return {
+          slug,
+          title: meta.title || slug,
+          date: meta.date || '',
+          category: meta.category || (meta.categories && meta.categories[0]) || '',
+          tags: meta.tags || [],
+          excerpt: meta.excerpt || body.substring(0, 120).replace(/[#*`]/g, '') + '...',
+          content: body,
+          sha: f.sha,
+        }
+      } catch {
+        return { slug, title: slug, date: '', category: '', tags: [], excerpt: '', content: '', sha: f.sha }
+      }
+    }))
+
+    return posts.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   } catch (e) {
     console.error('listPosts error:', e)
     return []
@@ -47,7 +62,6 @@ export function parseFrontMatter(content) {
   const fmRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/
   const match = content.match(fmRegex)
   if (!match) return { meta: {}, body: content }
-
   const fmText = match[1]
   const body = match[2]
   const meta = {}
@@ -70,31 +84,21 @@ export function parseFrontMatter(content) {
 export function buildFrontMatter(meta) {
   const lines = ['---']
   Object.entries(meta).forEach(([k, v]) => {
-    if (Array.isArray(v)) {
-      lines.push(`${k}: ${v.join(', ')}`)
-    } else {
-      lines.push(`${k}: ${v}`)
-    }
+    if (Array.isArray(v)) lines.push(`${k}: ${v.join(', ')}`)
+    else lines.push(`${k}: ${v}`)
   })
   lines.push('---')
   return lines.join('\n')
 }
 
-// 上传/创建文章
+// 创建文章
 export async function createPost(slug, content, message = '新增文章') {
   const token = getGithubToken()
   if (!token) throw new Error('未设置 GitHub Token')
-
   const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${GITHUB_CONFIG.postsPath}/${slug}.md`, {
     method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message,
-      content: Base64.encode(content),
-    }),
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, content: Base64.encode(content) }),
   })
   if (!res.ok) throw new Error(`上传失败: ${res.statusText}`)
   return res.json()
@@ -104,18 +108,10 @@ export async function createPost(slug, content, message = '新增文章') {
 export async function updatePost(slug, content, sha, message = '更新文章') {
   const token = getGithubToken()
   if (!token) throw new Error('未设置 GitHub Token')
-
   const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${GITHUB_CONFIG.postsPath}/${slug}.md`, {
     method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message,
-      content: Base64.encode(content),
-      sha,
-    }),
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, content: Base64.encode(content), sha }),
   })
   if (!res.ok) throw new Error(`更新失败: ${res.statusText}`)
   return res.json()
@@ -125,90 +121,94 @@ export async function updatePost(slug, content, sha, message = '更新文章') {
 export async function deletePost(slug, sha, message = '删除文章') {
   const token = getGithubToken()
   if (!token) throw new Error('未设置 GitHub Token')
-
   const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${GITHUB_CONFIG.postsPath}/${slug}.md`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, sha }),
   })
   if (!res.ok) throw new Error(`删除失败: ${res.statusText}`)
   return res.json()
 }
 
-// 获取模板列表
+// 模板列表
 export async function listTemplates() {
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${GITHUB_CONFIG.templatesPath}`)
     if (!res.ok) return []
     const files = await res.json()
-    return files.map(f => ({
-      name: f.name,
-      path: f.path,
-      url: f.download_url,
-    }))
-  } catch (e) {
-    return []
-  }
+    return files.map(f => ({ name: f.name, path: f.path, url: f.download_url }))
+  } catch { return [] }
 }
 
-// 获取模板内容
 export async function getTemplate(path) {
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}`)
     if (!res.ok) return null
     const data = await res.json()
     return Base64.decode(data.content)
-  } catch (e) {
-    return null
-  }
+  } catch { return null }
 }
 
-// 获取个人资料
+// 个人资料
 export async function getProfile() {
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/profile.json`)
     if (!res.ok) return getDefaultProfile()
     const data = await res.json()
     return JSON.parse(Base64.decode(data.content))
-  } catch (e) {
-    return getDefaultProfile()
-  }
+  } catch { return getDefaultProfile() }
 }
 
-// 更新个人资料
 export async function updateProfile(profile, sha) {
   const token = getGithubToken()
   if (!token) throw new Error('未设置 GitHub Token')
-
   const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/profile.json`, {
     method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: '更新个人资料',
-      content: Base64.encode(JSON.stringify(profile, null, 2)),
-      sha,
-    }),
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: '更新个人资料', content: Base64.encode(JSON.stringify(profile, null, 2)), sha }),
   })
   if (!res.ok) throw new Error(`更新资料失败: ${res.statusText}`)
   return res.json()
 }
 
-// 获取 profile.json 的 sha（用于更新）
 export async function getProfileSha() {
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/profile.json`)
     if (!res.ok) return null
     const data = await res.json()
     return data.sha
-  } catch (e) {
-    return null
-  }
+  } catch { return null }
+}
+
+// ===== Theme CRUD =====
+export async function getTheme() {
+  try {
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/theme.json`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return JSON.parse(Base64.decode(data.content))
+  } catch { return null }
+}
+
+export async function getThemeSha() {
+  try {
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/theme.json`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.sha
+  } catch { return null }
+}
+
+export async function updateTheme(theme, sha) {
+  const token = getGithubToken()
+  if (!token) throw new Error('未设置 GitHub Token')
+  const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/theme.json`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: '更新外观设置', content: Base64.encode(JSON.stringify(theme, null, 2)), sha }),
+  })
+  if (!res.ok) throw new Error(`更新外观失败: ${res.statusText}`)
+  return res.json()
 }
 
 function getDefaultProfile() {
@@ -217,10 +217,7 @@ function getDefaultProfile() {
     bio: '热爱技术，乐于分享',
     avatar: '',
     email: '',
-    social: {
-      github: 'https://github.com/1468102038',
-      blog: '',
-    },
+    social: { github: 'https://github.com/1468102038', blog: '' },
     skills: ['JavaScript', 'React', 'Node.js', 'Python'],
   }
 }

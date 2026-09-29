@@ -1,19 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { listPosts, getPost } from '../utils/github.js'
-import { groupByCategory, groupByTag, formatDate, excerpt } from '../utils/markdown.js'
+import { Link } from 'react-router-dom'
+import { listPosts } from '../utils/github.js'
 
 export default function Categories() {
-  const { cat } = useParams()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeTag, setActiveTag] = useState(null)
 
   useEffect(() => {
     async function load() {
-      setLoading(true)
-      const files = await listPosts()
-      const items = await Promise.all(files.map(f => getPost(f.slug)))
-      setPosts(items.filter(Boolean))
+      const data = await listPosts()
+      setPosts(data)
       setLoading(false)
     }
     load()
@@ -21,57 +18,71 @@ export default function Categories() {
 
   if (loading) return <div className="loading">加载中...</div>
 
-  if (cat) {
-    // 显示某个分类下的文章
-    const filtered = posts.filter(p =>
-      (p.meta?.categories || []).includes(cat) || (p.meta?.tags || []).includes(cat)
-    )
-    return (
-      <div className="category-page">
-        <h1>📂 {cat}</h1>
-        <Link to="/categories" className="back-link">← 全部分类</Link>
-        <div className="post-list">
-          {filtered.map(post => (
-            <article key={post.slug} className="post-card">
-              <Link to={`/post/${post.slug}`} className="post-card-link">
-                <h2 className="post-title">{post.meta?.title || post.slug}</h2>
-                <span className="post-date">📅 {formatDate(post.meta?.date)}</span>
-                <p className="post-excerpt">{excerpt(post.content)}</p>
-              </Link>
-            </article>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const categories = {}
+  const tagMap = {}
+  posts.forEach(p => {
+    if (p.category) {
+      if (!categories[p.category]) categories[p.category] = []
+      categories[p.category].push(p)
+    }
+    if (p.tags) p.tags.forEach(t => {
+      if (!tagMap[t]) tagMap[t] = []
+      tagMap[t].push(p)
+    })
+  })
 
-  // 显示所有分类和标签
-  const catGroups = groupByCategory(posts)
-  const tagGroups = groupByTag(posts)
+  const catEntries = Object.entries(categories).sort((a, b) => b[1].length - a[1].length)
+  const tagEntries = Object.entries(tagMap).sort((a, b) => b[1].length - a[1].length)
 
   return (
     <div className="categories-page">
-      <h1>📂 分类与标签</h1>
-      <section className="category-section">
-        <h2>分类</h2>
-        <div className="tag-cloud">
-          {Object.entries(catGroups).map(([cat, items]) => (
-            <Link key={cat} to={`/category/${cat}`} className="tag tag-category">
-              {cat} <span className="tag-count">({items.length})</span>
-            </Link>
-          ))}
+      <h1>分类</h1>
+
+      {catEntries.map(([cat, catPosts]) => (
+        <div key={cat} className="category-section">
+          <h2>📂 {cat} <span className="tag-count">{catPosts.length}</span></h2>
+          <ul className="archive-list">
+            {catPosts.map(p => (
+              <li key={p.slug}>
+                <Link to={`/article/${p.slug}`}>{p.title}</Link>
+                <span className="archive-date">{p.date}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-      </section>
-      <section className="category-section">
-        <h2>标签</h2>
-        <div className="tag-cloud">
-          {Object.entries(tagGroups).map(([tag, items]) => (
-            <Link key={tag} to={`/category/${tag}`} className="tag">
-              #{tag} <span className="tag-count">({items.length})</span>
-            </Link>
-          ))}
+      ))}
+
+      {tagEntries.length > 0 && (
+        <div className="category-section">
+          <h2>🏷 全部标签</h2>
+          <div className="tag-cloud">
+            {tagEntries.map(([tag, tagPosts]) => (
+              <button
+                key={tag}
+                className="tag"
+                style={{ cursor: 'pointer', background: activeTag === tag ? 'var(--primary)' : '', color: activeTag === tag ? 'white' : '' }}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              >
+                {tag} <span className="tag-count">{tagPosts.length}</span>
+              </button>
+            ))}
+          </div>
+
+          {activeTag && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <h3 style={{ marginBottom: '0.8rem' }}>「{activeTag}」相关文章</h3>
+              <ul className="archive-list">
+                {tagMap[activeTag].map(p => (
+                  <li key={p.slug}>
+                    <Link to={`/article/${p.slug}`}>{p.title}</Link>
+                    <span className="archive-date">{p.date}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      </section>
+      )}
     </div>
   )
 }

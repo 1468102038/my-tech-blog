@@ -1,20 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { listPosts, getPost } from '../utils/github.js'
-import { groupByYearMonth, formatDate } from '../utils/markdown.js'
+import { listPosts } from '../utils/github.js'
 
 export default function Archive() {
-  const [groups, setGroups] = useState({})
+  const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      setLoading(true)
-      const files = await listPosts()
-      const items = await Promise.all(files.map(f => getPost(f.slug)))
-      const sorted = items.filter(Boolean)
-        .sort((a, b) => (b.meta?.date || '').localeCompare(a.meta?.date || ''))
-      setGroups(groupByYearMonth(sorted))
+      const data = await listPosts()
+      setPosts(data)
       setLoading(false)
     }
     load()
@@ -22,26 +17,30 @@ export default function Archive() {
 
   if (loading) return <div className="loading">加载中...</div>
 
+  const groups = {}
+  posts.forEach(p => {
+    const year = (p.date || '未知').substring(0, 4)
+    if (!groups[year]) groups[year] = []
+    groups[year].push(p)
+  })
+  const years = Object.keys(groups).sort().reverse()
+
   return (
     <div className="archive-page">
-      <h1>📦 文章归档</h1>
-      {Object.keys(groups).length === 0 ? (
-        <p className="empty-state">暂无文章</p>
-      ) : (
-        Object.entries(groups).map(([key, posts]) => (
-          <section key={key} className="archive-group">
-            <h2 className="archive-group-title">{key} ({posts.length} 篇)</h2>
-            <ul className="archive-list">
-              {posts.map(post => (
-                <li key={post.slug}>
-                  <Link to={`/post/${post.slug}`}>{post.meta?.title || post.slug}</Link>
-                  <span className="archive-date">{formatDate(post.meta?.date)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
-      )}
+      <h1>归档</h1>
+      {years.map(year => (
+        <div key={year} className="archive-group">
+          <h2 className="archive-group-title">{year} 年 · {groups[year].length} 篇</h2>
+          <ul className="archive-list">
+            {groups[year].map(p => (
+              <li key={p.slug}>
+                <Link to={`/article/${p.slug}`}>{p.title}</Link>
+                <span className="archive-date">{p.date}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   )
 }

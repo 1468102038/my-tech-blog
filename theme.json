@@ -1,0 +1,13 @@
+{
+  "primaryColor": "#3b82f6",
+  "fontFamily": "system",
+  "radius": 8,
+  "cardSpacing": 20,
+  "layout": "sidebar",
+  "headerStyle": "clean",
+  "showExcerpt": true,
+  "showReadingTime": true,
+  "showTags": true,
+  "sidebarTitle": "关于本站",
+  "sidebarBio": "记录技术学习与成长的点滴"
+}
