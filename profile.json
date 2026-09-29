@@ -1,0 +1,11 @@
+{
+  "name": "星航convoy",
+  "bio": "热爱技术，乐于分享。专注于前端开发、云计算和 DevOps 实践。",
+  "avatar": "",
+  "email": "",
+  "social": {
+    "github": "https://github.com/1468102038",
+    "blog": "https://1468102038.github.io/my-tech-blog/"
+  },
+  "skills": ["JavaScript", "React", "Vite", "Node.js", "Python", "Docker", "Terraform", "Huawei Cloud"]
+}
